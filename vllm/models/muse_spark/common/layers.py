@@ -204,7 +204,11 @@ class MulTanhSoftCap(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         assert x.dtype in (torch.float32, torch.float16, torch.bfloat16)
-        if x.is_cuda and x.is_contiguous():
+        if (
+            x.is_cuda
+            and x.is_contiguous()
+            and hasattr(torch.ops._C, "muse_spark_mul_tanh_soft_cap")
+        ):
             if x.dtype != torch.float32:
                 x = x.float()
             return ops.muse_spark_mul_tanh_soft_cap(

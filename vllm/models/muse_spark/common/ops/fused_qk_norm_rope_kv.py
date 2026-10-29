@@ -26,6 +26,8 @@ def supports_fused_kv_insert(attn_layer: torch.nn.Module) -> bool:
     The backend must keep its KV write out of ``forward``. Off under DCP, whose
     FlashInfer prefill attends over the raw new-token k/v.
     """
+    if not hasattr(torch.ops._C, "fused_muse_spark_qknorm_rope_kv_insert"):
+        return False
     parallel_config = get_current_vllm_config().parallel_config
     if parallel_config.decode_context_parallel_size > 1:
         return False

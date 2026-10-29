@@ -746,7 +746,10 @@ class MuseSparkUnquantizedFusedMoE(UnquantizedFusedMoEMethod):
     muse_post_expert_finalize: MusePostExpertFinalize
 
     def __init__(self, moe: FusedMoEConfig) -> None:
-        self.use_route_major = current_platform.is_device_capability_family(90)
+        # Pre-Hopper GPUs lack the TRT-LLM BF16 MoE kernels: take the Triton path.
+        self.use_route_major = current_platform.is_device_capability_family(
+            90
+        ) or not current_platform.has_device_capability(90)
         if self.use_route_major:
             _validate_route_major_deployment(moe)
             FusedMoEMethodBase.__init__(self, moe)
