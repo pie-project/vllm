@@ -591,6 +591,32 @@ def transform_sf_into_required_layout(*args, **kwargs):
     )
 
 
+def _below_sm90() -> bool:
+    return current_platform.is_cuda() and not current_platform.has_device_capability(
+        90
+    )
+
+
+def _fp8_mqa_logits_torch(q, kv, weights, cu_seqlen_ks, cu_seqlen_ke):
+    """DeepGEMM-free FP8 MQA logits (row-chunked) for GPUs below sm_90."""
+    k = kv[0].to(torch.bfloat16)
+    scale = kv[1].reshape(-1)
+    m, h, _ = q.shape
+    n = k.shape[0]
+    out = torch.empty((m, n), dtype=torch.float32, device=q.device)
+    pos = torch.arange(n, device=q.device)
+    step = max(1, (1 << 28) // max(1, h * n * 4))
+    for s in range(0, m, step):
+        e = min(m, s + step)
+        score = torch.einsum("mhd,nd->mhn", q[s:e].to(torch.bfloat16), k).float()
+        logits = torch.einsum("mhn,mh->mn", score.relu_(), weights[s:e]) * scale
+        mask = (pos[None, :] >= cu_seqlen_ks[s:e, None]) & (
+            pos[None, :] < cu_seqlen_ke[s:e, None]
+        )
+        out[s:e] = logits.masked_fill_(~mask, float("-inf"))
+    return out
+
+
 def fp8_fp4_mqa_logits(
     q: tuple[torch.Tensor, torch.Tensor | None],
     kv: tuple[torch.Tensor, torch.Tensor],
@@ -624,6 +650,8 @@ def fp8_fp4_mqa_logits(
         Logits tensor of shape [M, N], dtype `torch.float32`.
 
     """
+    if _below_sm90() and q[1] is None:
+        return _fp8_mqa_logits_torch(q[0], kv, weights, cu_seqlen_ks, cu_seqlen_ke)
     _lazy_init()
     if _fp8_fp4_mqa_logits_impl is None:
         return _missing()
@@ -680,6 +708,8 @@ def get_paged_mqa_logits_metadata(
         to schedule work across SMs.
 
     """
+    if _below_sm90():  # unused by the Triton fallback
+        return torch.empty((1, 2), dtype=torch.int32, device=context_lens.device)
     _lazy_init()
     if _get_paged_mqa_logits_metadata_impl is None:
         return _missing()
@@ -732,6 +762,14 @@ def fp8_fp4_paged_mqa_logits(
         `torch.float32`.
 
     """
+    if _below_sm90() and q[1] is None and indices is None:
+        from vllm.v1.attention.ops.rocm_aiter_mla_sparse import (
+            rocm_fp8_paged_mqa_logits_triton,
+        )
+
+        return rocm_fp8_paged_mqa_logits_triton(
+            q[0], kv_cache, weights, context_lens, block_tables, max_model_len
+        )
     _lazy_init()
     if _fp8_fp4_paged_mqa_logits_impl is None:
         return _missing()
