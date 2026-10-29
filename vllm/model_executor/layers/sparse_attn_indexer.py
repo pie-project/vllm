@@ -674,20 +674,6 @@ def sparse_attn_indexer(
                         cu_seqlen_ks,
                         cu_seqlen_ke,
                     )
-                elif not current_platform.has_device_capability(90):
-                    # DeepGEMM's MQA logits are Hopper/Blackwell only.
-                    from vllm.v1.attention.ops.rocm_aiter_mla_sparse import (
-                        fp8_mqa_logits_torch,
-                    )
-
-                    assert q_scale_slice is None, "FP4 indexer needs sm_90+"
-                    logits = fp8_mqa_logits_torch(
-                        q_slice_cast,
-                        (k_quant_cast, k_scale_cast),
-                        weights[row_start:row_end],
-                        cu_seqlen_ks,
-                        cu_seqlen_ke,
-                    )
                 else:
                     logits = fp8_fp4_mqa_logits(
                         (q_slice_cast, q_scale_slice),
