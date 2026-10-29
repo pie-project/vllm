@@ -535,6 +535,10 @@ _MULTIMODAL_MODELS = {
     "NemotronH_Omni_Reasoning_V3": ("nano_nemotron_vl", "NemotronH_Nano_VL_V2"),
     "NVLM_D": ("nvlm_d", "NVLM_D_Model"),
     "MuseGlimmerForConditionalGeneration": ("muse_glimmer", "MuseGlimmerForCausalLM"),
+    "MuseSparkForConditionalGeneration": (
+        "vllm.models.muse_spark",
+        "MuseSparkForConditionalGeneration",
+    ),
     "OpenCUAForConditionalGeneration": ("opencua", "OpenCUAForConditionalGeneration"),
     "OpenPanguVLForConditionalGeneration": (
         "openpangu_vl",
@@ -642,6 +646,10 @@ _SPECULATIVE_DECODING_MODELS = {
     # DFlashLagunaForCausalLM. The bare name is kept as a defensive alias.
     "MuseGlimmerAssistantModel": ("qwen3_dflash", "DFlashQwen3ForCausalLM"),
     "DFlashMuseGlimmerAssistantModel": ("qwen3_dflash", "DFlashQwen3ForCausalLM"),
+    "MuseSparkDSparkModel": (
+        "vllm.models.muse_spark.common.dspark",
+        "MuseSparkDSparkForCausalLM",
+    ),
     "DSparkDraftModel": ("vllm.models.deepseek_v4", "DSparkDeepseekV4ForCausalLM"),
     "DSparkV41DraftModel": (
         "vllm.models.deepseek_v41",
