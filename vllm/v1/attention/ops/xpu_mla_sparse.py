@@ -92,7 +92,7 @@ def _bf16_mla_sparse_kernel(
             ),
             mask=mask_indice,
             other=-1,
-        )
+        ).to(tl.int64)  # row * stride overflows int32 on large caches
 
         mask_kv = (indices >= 0) & (indices < seq_kv)
         mask_kv_d = mask_dmodel
