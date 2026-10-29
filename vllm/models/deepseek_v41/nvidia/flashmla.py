@@ -22,6 +22,7 @@ from vllm.models.deepseek_v41.sparse_mla import (
     DeepseekV4FlashMLAMetadata,
     DeepseekV41SparseSWAMetadataBuilder,
 )
+from vllm.platforms import current_platform
 from vllm.utils.math_utils import round_up
 from vllm.v1.attention.backend import AttentionCGSupport
 from vllm.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWABackend
@@ -30,6 +31,17 @@ from vllm.v1.attention.ops.flashmla import (
     flash_mla_with_kvcache,
 )
 from vllm.v1.worker.workspace import current_workspace_manager
+
+if not current_platform.has_device_capability(90):
+    # FlashMLA's sparse kernels are Hopper/Blackwell only.
+    from functools import partial
+
+    from vllm.models.deepseek_v4.nvidia.ops import sparse_mla_fallback
+
+    flash_mla_sparse_fwd = sparse_mla_fallback.flash_mla_sparse_fwd  # noqa: F811
+    flash_mla_with_kvcache = partial(  # noqa: F811
+        sparse_mla_fallback.flash_mla_with_kvcache, dequantize_and_gather_k_cache
+    )
 
 if TYPE_CHECKING:
     from vllm.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
