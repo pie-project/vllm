@@ -974,6 +974,18 @@ class MiniMaxM3Model(nn.Module, EagleModelMixin):
             # ModelOpt MXFP8 layers expose them as ``weight_scale``.
             if "weight_scale_inv" in name:
                 name = name.replace("weight_scale_inv", "weight_scale")
+            # NVFP4 routed experts are stored in compressed-tensors names; the
+            # ModelOpt NVFP4 MoE takes `weight`, `weight_scale_2`, `input_scale`
+            # (the reciprocals of the global scales).
+            if "block_sparse_moe.experts." in name:
+                if name.endswith(".weight_packed"):
+                    name = name.removesuffix("_packed")
+                elif name.endswith(".weight_global_scale"):
+                    name = name.replace(".weight_global_scale", ".weight_scale_2")
+                    loaded_weight = 1.0 / loaded_weight.float()
+                elif name.endswith(".input_global_scale"):
+                    name = name.replace(".input_global_scale", ".input_scale")
+                    loaded_weight = 1.0 / loaded_weight.float()
 
             for param_name, weight_name, shard_id in stacked_params_mapping:
                 if weight_name not in name:
