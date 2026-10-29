@@ -19,6 +19,7 @@ from vllm.models.deepseek_v41.decoder_replay_layers import (
 from vllm.models.deepseek_v41.nvidia.decoder_replay_cudagraph import (
     DecoderReplayCudaGraphManager,
 )
+from vllm.platforms import current_platform
 from vllm.triton_utils import tl, triton
 from vllm.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadataBuilder
 from vllm.v1.attention.backends.utils import PAD_SLOT_ID
@@ -254,6 +255,8 @@ class DeepseekV41ModelState(DefaultModelState):
             # The graphs' fixed inputs hold no LoRA mapping and no None input ids.
             and vllm_config.lora_config is None
             and not vllm_config.model_config.enable_prompt_embeds
+            # Replaying the layers' graphs on sm_8x faults (illegal address).
+            and current_platform.has_device_capability(90)
         ):
             threshold = compilation_config.decoder_replay_trim_threshold
             if threshold <= layers.window:
