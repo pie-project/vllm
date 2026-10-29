@@ -1189,9 +1189,30 @@ class ModelOptMxFp8Config(ModelOptQuantConfigBase):
             )
 
         self.kv_cache_quant_algo = kv_cache_quant_algo
+        # MiniMax-M3 checkpoints keep the routed experts in NVFP4
+        # (`moe_quant_algo: NVFP4`) beside the MXFP8 projections.
+        self.moe_quant_algo: str | None = None
+        self.moe_group_size = 16
 
     def get_name(self) -> QuantizationMethods:
         return "modelopt_mxfp8"
+
+    def get_quant_method(
+        self, layer: torch.nn.Module, prefix: str
+    ) -> "QuantizeMethodBase | None":
+        if (
+            self.moe_quant_algo == "NVFP4"
+            and isinstance(layer, RoutedExperts)
+            and not self.is_layer_excluded(prefix)
+        ):
+            return ModelOptNvFp4FusedMoE(
+                quant_config=ModelOptNvFp4Config(
+                    is_checkpoint_nvfp4_serialized=True,
+                    group_size=self.moe_group_size,
+                ),
+                moe_config=layer.moe_config,
+            )
+        return super().get_quant_method(layer, prefix)
 
     def get_supported_act_dtypes(self) -> list[torch.dtype]:
         return [torch.bfloat16]
@@ -1215,6 +1236,8 @@ class ModelOptMxFp8Config(ModelOptQuantConfigBase):
         # MiniMax-style checkpoints tag `quant_method: "mxfp8"` + `ignored_layers`
         # (same on-disk format as ModelOpt MXFP8); normalize to the ModelOpt
         # schema and reuse the shared parser.
+        moe_quant_algo = str(config.get("moe_quant_algo") or "").upper() or None
+        moe_group_size = int(config.get("group_size") or 16)
         if "quantization" not in config and not config.get("quant_algo"):
             config = {
                 "quant_method": "modelopt",
@@ -1224,7 +1247,10 @@ class ModelOptMxFp8Config(ModelOptQuantConfigBase):
                     "exclude_modules": config.get("ignored_layers", []) or [],
                 },
             }
-        return cast("ModelOptMxFp8Config", super().from_config(config))
+        quant_config = cast("ModelOptMxFp8Config", super().from_config(config))
+        quant_config.moe_quant_algo = moe_quant_algo
+        quant_config.moe_group_size = moe_group_size
+        return quant_config
 
     @classmethod
     def _from_config(
