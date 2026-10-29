@@ -370,6 +370,21 @@ class Fp8LinearMethod(LinearMethodBase):
             return
 
         if self.use_marlin:
+            if self.block_quant and getattr(layer, "is_bmm", False):
+                # Grouped-bmm layers (DeepSeek-V4 wo_a) bypass the linear kernel
+                # and, without DeepGEMM's fp8_einsum, run as a bf16 bmm.
+                from vllm.model_executor.layers.quantization.utils.quant_utils import (  # noqa: E501
+                    scaled_dequantize,
+                )
+
+                weight = scaled_dequantize(
+                    layer.weight,
+                    layer.weight_scale_inv,
+                    group_shape=layer.weight_block_size,
+                    out_dtype=self.out_dtype,
+                )
+                replace_parameter(layer, "weight", weight)
+                return
             if not self.block_quant:
                 # Canonicalize to (K, N) for the kernel.
                 replace_parameter(layer, "weight", layer.weight.t())
