@@ -77,7 +77,11 @@ class XPUMLASparseBackend(AttentionBackend):
 
     @classmethod
     def get_supported_head_sizes(cls) -> list[int]:
-        return [576]
+        return [576, 512]  # 512: rope-free NoPE MLA (GLM5Next)
+
+    @classmethod
+    def supports_sink(cls) -> bool:
+        return True
 
 
 @dataclass
@@ -112,6 +116,7 @@ class XPUMLASparseMetadata(AttentionMetadata):
     num_decodes: int = 0
     num_prefills: int = 0
     num_decode_tokens: int = 0
+    prefill: None = None  # no dense/masked-MHA prefill on this backend
 
 
 @dataclass
@@ -217,8 +222,13 @@ class XPUMLASparseImpl(MLAAttentionImpl[XPUMLASparseMetadata], SharedTopkIndices
         self.num_kv_heads = num_kv_heads
         self.kv_cache_dtype = kv_cache_dtype
         self.kv_lora_rank: int = mla_args["kv_lora_rank"]
+        self.sinks: torch.Tensor | None = mla_args.get("sinks")
         self.softmax_scale = scale
         self.init_topk_indices_buffer(indexer, topk_indices_buffer)
+
+    def record_logical_topk_ready(self) -> None:
+        # Shares the top-k buffer but does not join sparse-MLA index groups.
+        pass
 
     def _forward_bf16_kv(
         self,
@@ -234,12 +244,17 @@ class XPUMLASparseImpl(MLAAttentionImpl[XPUMLASparseMetadata], SharedTopkIndices
 
         topk_indices = topk_indices.view(num_tokens, 1, -1)
 
-        output, _, _ = triton_bf16_mla_sparse_interface(
+        output, lse, _ = triton_bf16_mla_sparse_interface(
             q,
             kv_c_and_k_pe_cache,
             topk_indices,
             sm_scale=self.softmax_scale,
+            block_dpe=q.shape[-1] - 512,
         )
+        if self.sinks is not None:  # out *= exp(lse) / (exp(lse) + exp(sink))
+            h = min(self.sinks.shape[0], output.shape[1])
+            gate = torch.sigmoid(lse[:, :h] - self.sinks[:h].float())
+            output[:, :h] = (output[:, :h].float() * gate[..., None]).to(output.dtype)
 
         return output[:, : self.num_heads, :]
 
@@ -274,7 +289,8 @@ class XPUMLASparseImpl(MLAAttentionImpl[XPUMLASparseMetadata], SharedTopkIndices
             topk_indices,
             BLOCK_SIZE=attn_metadata.block_size,
             BLOCK_STRIDE_ROWS=block_stride_rows,
-            NUM_TOPK_TOKENS=attn_metadata.topk_tokens,
+            NUM_TOPK_TOKENS=topk_indices.shape[1],  # may be padded (kpool tail)
+            BLOCK_N=min(128, topk_indices.shape[1]),
         )
 
         attn_out = self._forward_bf16_kv(q, kv_rows, topk_indices_global, attn_metadata)
