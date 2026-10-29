@@ -38,7 +38,9 @@ def _hc_prenorm_gemm_outputs(
     use_deep_gemm = is_deep_gemm_supported() or not use_tilelang_fallback
     num_tokens = x.shape[0]
     n_splits = (
-        compute_num_split(64, x.shape[1], cdiv(num_tokens, 64)) if use_deep_gemm else 1
+        compute_num_split(64, x.shape[1], cdiv(num_tokens, 64))
+        if use_deep_gemm and is_deep_gemm_supported()
+        else 1
     )
     out = torch.empty(
         n_splits,
@@ -53,7 +55,9 @@ def _hc_prenorm_gemm_outputs(
         dtype=torch.float32,
         device=x.device,
     )
-    if use_deep_gemm:
+    if use_deep_gemm and not is_deep_gemm_supported():
+        _torch_hc_prenorm_gemm(x, fn, out, sqrsum)
+    elif use_deep_gemm:
         tf32_hc_prenorm_gemm(x, fn, out, sqrsum, n_splits)
     else:
         from vllm.model_executor.kernels.mhc.tilelang_kernels import (
