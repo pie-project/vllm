@@ -701,6 +701,15 @@ class Worker(WorkerBase):
         if (
             current_platform.is_cuda_alike() or current_platform.is_xpu()
         ) and self.vllm_config.compilation_config.cudagraph_mode != CUDAGraphMode.NONE:
+            from vllm.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
+
+            if current_platform.is_cuda() and any(
+                isinstance(m, SparseAttnIndexer)
+                for m in self.model_runner.get_model().modules()
+            ):
+                from vllm.utils.deep_gemm import init_jit_runtime
+
+                init_jit_runtime()
             cudagraph_memory_estimate = self.model_runner.profile_cudagraph_memory()
 
         # Respect the opt-in flag as originally designed.
