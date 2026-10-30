@@ -309,6 +309,12 @@ class CutlassFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
                 "Supports only dynamic per token group activation "
                 "quantization with group_shape=(1,128).",
             )
+        if (
+            current_platform.is_device_capability_family(120)
+            and config.weight_shape[0] % 128 != 0
+        ):
+            # SM120 blockwise CUTLASS returns an invalid status unless N % 128 == 0
+            return False, "SM120 block FP8 CUTLASS needs N divisible by 128."
         return True, None
 
     def apply_block_scaled_mm(
