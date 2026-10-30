@@ -506,6 +506,7 @@ def triton_convert_req_index_to_global_index(
         "is allocated like token_indices, so a longer req_id writes out of bounds"
     )
     assert token_indices.shape[1] == NUM_TOPK_TOKENS
+    BLOCK_N = min(BLOCK_N, NUM_TOPK_TOKENS)  # Hy4: index_topk 16
     assert NUM_TOPK_TOKENS % BLOCK_N == 0, (
         f"NUM_TOPK_TOKENS ({NUM_TOPK_TOKENS}) must be divisible by BLOCK_N ({BLOCK_N})"
     )

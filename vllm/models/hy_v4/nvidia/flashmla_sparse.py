@@ -264,6 +264,10 @@ class HYV4FlashMLASparseImpl(FlashMLASparseImpl):
             q = q_padded
 
         topk_indices = topk_indices.view(num_tokens, 1, -1)
+        if topk_indices.shape[-1] % 128:  # FlashMLA wants topk % 128 == 0; -1 is skipped
+            topk_indices = torch.nn.functional.pad(
+                topk_indices, (0, -topk_indices.shape[-1] % 128), value=-1
+            )
         output, _, lse = flash_mla_sparse_fwd(
             q,
             kv_c_and_k_pe_cache,
