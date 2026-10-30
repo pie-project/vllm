@@ -32,8 +32,11 @@ from vllm.v1.attention.ops.flashmla import (
 )
 from vllm.v1.worker.workspace import current_workspace_manager
 
-if not current_platform.has_device_capability(90):
-    # FlashMLA's sparse kernels are Hopper/Blackwell only.
+_SPARSE_MLA_FALLBACK = not current_platform.has_device_capability(
+    90
+) or current_platform.is_device_capability_family(120)
+if _SPARSE_MLA_FALLBACK:
+    # FlashMLA's sparse kernels are sm_90/sm_100 only.
     from functools import partial
 
     from vllm.models.deepseek_v4.nvidia.ops import sparse_mla_fallback
@@ -232,7 +235,8 @@ class DeepseekV4FlashMLAAttention(DeepseekV4Attention):
             1: swa_metadata.tile_sched_c1a,
             2: swa_metadata.tile_sched_c2a,
         }[self.compress_ratio]
-        assert tile_metadata is not None, (
+        # The Triton fallback plans no tiles (none are built on sm_12x).
+        assert tile_metadata is not None or _SPARSE_MLA_FALLBACK, (
             "swa_metadata missing tile_sched entry for "
             f"compress_ratio={self.compress_ratio}; "
             "DeepseekSparseSWAMetadataBuilder.build_tile_scheduler did not "

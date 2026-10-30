@@ -1019,6 +1019,14 @@ class SparseAttnIndexer(CustomOp):
                 "Sparse Attention Indexer CUDA op requires DeepGEMM support in "
                 "the current vLLM environment."
             )
+        if current_platform.is_cuda() and current_platform.is_device_capability_family(
+            120
+        ):
+            # Load DeepGEMM now: its first call reads device props, which is
+            # not allowed inside the CUDA graph capture that may run it first.
+            from vllm.utils.deep_gemm import _lazy_init
+
+            _lazy_init()
 
         if vllm_config.kernel_config.enable_jit_warmup:
             from vllm.v1.attention.ops.common import (

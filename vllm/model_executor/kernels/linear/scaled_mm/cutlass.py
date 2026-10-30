@@ -294,6 +294,10 @@ class CutlassFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
                 "The device compute capability of"
                 f"{compute_capability} is not supported.",
             )
+        if current_platform.is_device_capability_family(120):
+            # c3x has no sm_12x block-FP8 kernel for these weights; take the
+            # next kernel, as below sm_90.
+            return False, "CUTLASS block FP8 is unsupported on sm_12x."
         return True, None
 
     @classmethod
