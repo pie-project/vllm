@@ -1043,6 +1043,23 @@ class VoyageQwen3BidirectionalEmbedModelConfig(VerifyAndUpdateConfig):
         model_config.hf_config.embedding_size = model_config.hf_config.num_labels
 
 
+class Glm5NextForConditionalGenerationConfig(VerifyAndUpdateConfig):
+    @staticmethod
+    def verify_and_update_config(vllm_config: "VllmConfig") -> None:
+        # On SM120 the PIECEWISE cudagraph replay of GLM-5.3-Flash returns NaN logits at every position
+        # (eager and FULL decode graphs are finite): capture full decode graphs only, prefill runs eager.
+        from vllm.config.compilation import CUDAGraphMode
+        from vllm.platforms import current_platform
+
+        compilation_config = vllm_config.compilation_config
+        if (
+            current_platform.is_cuda()
+            and current_platform.is_device_capability_family(120)
+            and compilation_config.cudagraph_mode is None
+        ):
+            compilation_config.cudagraph_mode = CUDAGraphMode.FULL_DECODE_ONLY
+
+
 class LongcatFlashNgramForCausalLMConfig(VerifyAndUpdateConfig):
     @staticmethod
     def verify_and_update_config(vllm_config: "VllmConfig") -> None:
@@ -1061,6 +1078,7 @@ class LongcatFlashNgramForCausalLMConfig(VerifyAndUpdateConfig):
 
 
 MODELS_CONFIG_MAP: dict[str, type[VerifyAndUpdateConfig]] = {
+    "Glm5NextForConditionalGeneration": Glm5NextForConditionalGenerationConfig,
     "ColBERTJinaRobertaModel": JinaRobertaModelConfig,
     "ColQwen3_5": ColQwen3_5Config,
     "DeepseekV4ForCausalLM": DeepseekV4ForCausalLMConfig,
