@@ -199,7 +199,7 @@ def _select_dsv4_attn_cls(vllm_config: VllmConfig) -> type[DeepseekV4Attention]:
 
     The generic CUDA backend selector does not instantiate DSv4 layers directly,
     so map generic sparse-MLA choices to the DSv4-specialized attention class.
-    Without an explicit backend: SM12 takes FlashInfer, SM100 takes mega
+    Without an explicit backend: SM12 takes FlashMLA, SM100 takes mega
     attention where the topology allows it, and everything else keeps the
     FlashMLA path.
     """
@@ -231,7 +231,9 @@ def _select_dsv4_attn_cls(vllm_config: VllmConfig) -> type[DeepseekV4Attention]:
         return DeepseekV4FlashMLAAttention
 
     if device_capability is not None and device_capability.major == 12:
-        return DeepseekV4FlashInferSM120Attention
+        # FlashInfer's SM120 decode needs 64-slot compressed pages, which the
+        # 128-token V4.1 blocks do not give; FlashMLA's Triton fallback serves it.
+        return DeepseekV4FlashMLAAttention
     # Mega attention is the SM100 default: it fuses Q RoPE, sparse attention,
     # the output's inverse RoPE and its FP8 cast into one launch, and brings
     # the 288 B NVFP4 compressed record -- the format the reference

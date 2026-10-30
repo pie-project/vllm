@@ -597,6 +597,13 @@ def _below_sm90() -> bool:
     )
 
 
+def _no_paged_mqa_kernel(block_size: int) -> bool:
+    """DeepGEMM's sm_12x paged MQA logits exist for block_kv 32/64 only."""
+    return _below_sm90() or (
+        current_platform.is_device_capability_family(120) and block_size not in (32, 64)
+    )
+
+
 def _fp8_mqa_logits_torch(q, kv, weights, cu_seqlen_ks, cu_seqlen_ke):
     """DeepGEMM-free FP8 MQA logits (row-chunked) for GPUs below sm_90."""
     k = kv[0].to(torch.bfloat16)
@@ -708,7 +715,7 @@ def get_paged_mqa_logits_metadata(
         to schedule work across SMs.
 
     """
-    if _below_sm90():  # unused by the Triton fallback
+    if _no_paged_mqa_kernel(block_size):  # unused by the Triton fallback
         return torch.empty((1, 2), dtype=torch.int32, device=context_lens.device)
     _lazy_init()
     if _get_paged_mqa_logits_metadata_impl is None:
@@ -762,7 +769,7 @@ def fp8_fp4_paged_mqa_logits(
         `torch.float32`.
 
     """
-    if _below_sm90() and q[1] is None and indices is None:
+    if _no_paged_mqa_kernel(kv_cache.shape[1]) and q[1] is None and indices is None:
         from vllm.v1.attention.ops.rocm_aiter_mla_sparse import (
             rocm_fp8_paged_mqa_logits_triton,
         )
