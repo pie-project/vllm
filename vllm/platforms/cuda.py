@@ -133,6 +133,8 @@ def _get_backend_priorities(
             return [
                 AttentionBackendEnum.TRITON_MLA,
                 AttentionBackendEnum.FLASHINFER_MLA_SPARSE_SM120,
+                # Portable Triton sparse MLA (index_topk other than 2048, e.g. Hy4).
+                AttentionBackendEnum.XPU_MLA_SPARSE,
             ]
         else:
             sparse_tail = [
