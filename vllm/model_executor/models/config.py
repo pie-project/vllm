@@ -410,6 +410,22 @@ class DeepseekV4ForCausalLMConfig(VerifyAndUpdateConfig):
                     "deepseek_v4_fp8"
                 )
 
+    @staticmethod
+    def verify_and_update_config(vllm_config: "VllmConfig") -> None:
+        from vllm.platforms import current_platform
+
+        # On sm_90, DeepSeek-V4.1's CUDA graphs past 128 tokens hang or fault
+        # (illegal address) in decode; eager runs those batches.
+        compilation_config = vllm_config.compilation_config
+        model_type = getattr(vllm_config.model_config.hf_text_config, "model_type", None)
+        if (
+            model_type == "deepseek_v41"
+            and current_platform.is_device_capability_family(90)
+            and compilation_config.cudagraph_capture_sizes is None
+            and compilation_config.max_cudagraph_capture_size is None
+        ):
+            compilation_config.max_cudagraph_capture_size = 128
+
 
 class KimiK3ForConditionalGenerationConfig(VerifyAndUpdateConfig):
     """Route MXFP4-checkpointed Kimi-K3 MoE experts to the MXFP4 interface.
