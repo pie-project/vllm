@@ -121,9 +121,12 @@ def default_breakable_cudagraph_architectures() -> frozenset[str]:
         # recipe can start.
         return frozenset({"DeepseekV41ForCausalLM"})
     if current_platform.is_device_capability_family(90):
-        # On Hopper, a breakable graph replaying a DeepSeek-V4.1 prefill piece
+        # On Hopper, a breakable graph replaying a DeepSeek-V4/V4.1 prefill piece
         # faults (illegal address) once max_num_seqs reaches 64; plain graphs serve it.
-        return DEFAULT_BREAKABLE_CUDAGRAPH_ARCHITECTURES - {"DeepseekV41ForCausalLM"}
+        return DEFAULT_BREAKABLE_CUDAGRAPH_ARCHITECTURES - {
+            "DeepseekV4ForCausalLM",
+            "DeepseekV41ForCausalLM",
+        }
     return DEFAULT_BREAKABLE_CUDAGRAPH_ARCHITECTURES
 
 
