@@ -256,8 +256,9 @@ class DeepseekV41ModelState(DefaultModelState):
             and vllm_config.lora_config is None
             and not vllm_config.model_config.enable_prompt_embeds
             # Replaying the layers' graphs on sm_8x faults (illegal address),
-            # and on sm_12x, where the same Triton sparse-MLA fallback serves.
-            and current_platform.has_device_capability(90)
+            # and on sm_12x, where the same Triton sparse-MLA fallback serves,
+            # and on sm_90 (H100, a 64-prompt batch of 512-token prompts).
+            and current_platform.has_device_capability(100)
             and not current_platform.is_device_capability_family(120)
         ):
             threshold = compilation_config.decoder_replay_trim_threshold
