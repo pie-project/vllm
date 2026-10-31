@@ -120,9 +120,12 @@ def default_breakable_cudagraph_architectures() -> frozenset[str]:
         # graphs are on. Enable this architecture so the published AMD
         # recipe can start.
         return frozenset({"DeepseekV41ForCausalLM"})
-    if current_platform.is_device_capability_family(90):
-        # On Hopper, a breakable graph replaying a DeepSeek-V4.1 prefill piece
-        # faults (illegal address) once max_num_seqs reaches 64; plain graphs serve it.
+    if current_platform.is_device_capability_family(
+        90
+    ) or current_platform.is_device_capability_family(100):
+        # On Hopper and sm_100 (B200), a breakable graph replaying a DeepSeek-V4.1
+        # prefill piece faults (illegal address) once max_num_seqs reaches 64;
+        # plain graphs serve it.
         return DEFAULT_BREAKABLE_CUDAGRAPH_ARCHITECTURES - {"DeepseekV41ForCausalLM"}
     return DEFAULT_BREAKABLE_CUDAGRAPH_ARCHITECTURES
 
