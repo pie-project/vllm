@@ -414,12 +414,12 @@ class DeepseekV4ForCausalLMConfig(VerifyAndUpdateConfig):
     def verify_and_update_config(vllm_config: "VllmConfig") -> None:
         from vllm.platforms import current_platform
 
-        # On sm_90, DeepSeek-V4.1's CUDA graphs past 128 tokens hang or fault
+        # On sm_90, DeepSeek-V4 and V4.1 CUDA graphs past 128 tokens hang or fault
         # (illegal address) in decode; eager runs those batches.
         compilation_config = vllm_config.compilation_config
         model_type = getattr(vllm_config.model_config.hf_text_config, "model_type", None)
         if (
-            model_type == "deepseek_v41"
+            model_type in ("deepseek_v4", "deepseek_v41")
             and current_platform.is_device_capability_family(90)
             and compilation_config.cudagraph_capture_sizes is None
             and compilation_config.max_cudagraph_capture_size is None
