@@ -695,6 +695,20 @@ def _paged_mqa_logits_schedule_slots(num_sms: int, next_n: int) -> int:
     return num_sms // num_kv_multicast
 
 
+def init_jit_runtime() -> None:
+    """Build DeepGEMM's JIT runtime outside CUDA graph capture: its first JIT
+    kernel runs cudaFree(nullptr), which a capturing stream refuses."""
+    if _no_paged_mqa_kernel(64):
+        return
+    _lazy_init()
+    if _get_paged_mqa_logits_metadata_impl is None:
+        return
+    lens = torch.ones((1, 1), dtype=torch.int32, device="cuda")
+    _get_paged_mqa_logits_metadata_impl(
+        lens, 64, _paged_mqa_logits_schedule_slots(get_num_sms(), 1)
+    )
+
+
 def get_paged_mqa_logits_metadata(
     context_lens: torch.Tensor,
     block_size: int,
