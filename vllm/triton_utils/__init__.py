@@ -25,6 +25,11 @@ else:
 
 from vllm.triton_utils.tensor_descriptor import use_tensor_descriptor
 
+if HAS_TRITON:
+    from vllm.triton_utils.sm80_fp8 import patch_triton_fp8e4nv
+
+    patch_triton_fp8e4nv()
+
 LOG2E = 1.4426950408889634
 LOGE2 = 0.6931471805599453
 
