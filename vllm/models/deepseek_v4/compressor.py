@@ -318,7 +318,11 @@ class DeepseekCompressor(nn.Module):
                 head_dim=self.head_dim,
                 compress_ratio=self.compress_ratio,
             )
-            if current_platform.is_cuda() and self.head_dim == 512:
+            if (
+                current_platform.is_cuda()
+                and self.head_dim == 512
+                and current_platform.has_device_capability(89)
+            ):
                 from vllm.models.deepseek_v4.nvidia.ops.sparse_attn_compress_cutedsl import (  # noqa: E501
                     _SPARSE_ATTN_COMPRESS_C128_BLOCK8_KERNEL,
                     _SPARSE_ATTN_COMPRESS_NORM_ROPE_STORE_C4_KERNEL,
@@ -444,7 +448,11 @@ class DeepseekCompressor(nn.Module):
         # cutedsl (head=512) accepts the full-cache flags; triton (indexer/AMD)
         # does not, so the two callables have different signatures.
         compress_norm_rope_store_fn: Any
-        if current_platform.is_cuda() and self.head_dim == 512:
+        # below sm_89 the cutedsl kernels emit cvt.e4m3x2 PTX that ptxas refuses: the
+        # fp8_ds_mla layout goes through the triton kernels there, as on AMD
+        if current_platform.is_cuda() and self.head_dim == 512 and (
+            store_full_kv or current_platform.has_device_capability(89)
+        ):
             from .nvidia.ops.sparse_attn_compress_cutedsl import (
                 _SPARSE_ATTN_COMPRESSOR_CUTEDSL_KERNEL,
             )
