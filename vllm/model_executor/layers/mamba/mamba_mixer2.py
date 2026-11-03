@@ -525,6 +525,7 @@ class MambaMixer2(MambaBase, PluggableLayer):
         if prefix in compilation_config.static_forward_context:
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
+        self._max_num_seqs = vllm_config.scheduler_config.max_num_seqs
 
         self.model_config = model_config
         self.cache_config = cache_config
@@ -706,6 +707,46 @@ class MambaMixer2(MambaBase, PluggableLayer):
                     use_initial_states,
                     exc_info=True,
                 )
+
+        # The profile run's tokens over as many sequences as the scheduler
+        # prefills at once: the SSD forward keeps fp32 states for every chunk
+        # and gathers each sequence's last one, so the profiled peak must see
+        # that batch. With one chunk it did not, and the KV cache took the
+        # memory the warmup's full prefill needs (Nemotron-3 Ultra mini at 256
+        # sequences: 2 x 2 GiB, out of memory on a 48 GB L40S).
+        num_tokens = projected_states.shape[0]
+        batch = max(1, min(num_tokens, self._max_num_seqs))
+        cu_seqlens, starts, seq_idx_list, last_chunks = [0], [], [], []
+        for i in range(batch):
+            n = num_tokens // batch + (i < num_tokens % batch)
+            starts += range(cu_seqlens[-1], cu_seqlens[-1] + n, chunk_size)
+            seq_idx_list += [i] * (len(starts) - len(seq_idx_list))
+            last_chunks.append(len(starts) - 1)
+            cu_seqlens.append(cu_seqlens[-1] + n)
+        mamba_chunk_scan_combined_varlen(
+            x=torch.zeros(num_tokens, nheads, headdim, device=device, dtype=dtype),
+            dt=torch.zeros(num_tokens, nheads, device=device, dtype=dtype),
+            A=self.A,
+            B=torch.zeros(num_tokens, ngroups, dstate, device=device, dtype=dtype),
+            C=torch.zeros(num_tokens, ngroups, dstate, device=device, dtype=dtype),
+            chunk_size=chunk_size,
+            cu_seqlens=torch.tensor(cu_seqlens, device=device, dtype=torch.int32),
+            cu_chunk_seqlens=torch.tensor(
+                starts + [num_tokens], device=device, dtype=torch.int32
+            ),
+            last_chunk_indices=torch.tensor(
+                last_chunks, device=device, dtype=torch.int32
+            ),
+            seq_idx=torch.tensor(seq_idx_list, device=device, dtype=torch.int32),
+            out=torch.empty(num_tokens, nheads, headdim, device=device, dtype=dtype),
+            D=self.D,
+            z=None,
+            dt_bias=self.dt_bias,
+            initial_states=None,
+            dt_softplus=True,
+            dt_limit=(0.0, float("inf")),
+            state_dtype=ssm_state_dtype,
+        )
 
         logger.debug("Mamba2 SSD kernel warmup completed for layer %s", self.prefix)
         torch.accelerator.empty_cache()
