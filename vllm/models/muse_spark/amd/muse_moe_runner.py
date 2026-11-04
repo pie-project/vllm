@@ -24,9 +24,15 @@ from vllm.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
 )
 from vllm.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
-    AiterMxfp4Experts,
     rocm_aiter_fused_experts,
 )
+
+try:
+    from vllm.model_executor.layers.fused_moe.experts.rocm_aiter_moe import (
+        AiterMxfp4Experts,
+    )
+except ImportError:  # 0.32.0's ROCm wheel has none; only the MXFP4 checkpoints' experts take it
+    AiterMxfp4Experts = object
 from vllm.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
 from vllm.model_executor.layers.fused_moe.fused_moe_method_base import (
     FusedMoEMethodBase,
