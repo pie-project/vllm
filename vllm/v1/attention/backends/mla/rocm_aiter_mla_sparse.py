@@ -251,6 +251,8 @@ def triton_convert_req_index_to_global_index(
         "must cover the same tokens"
     )
     assert token_indices.shape[1] == NUM_TOPK_TOKENS
+    # an indexer keeping fewer keys than one tile (Hy4, index_topk 16) takes one tile of its own width
+    BLOCK_N = min(BLOCK_N, NUM_TOPK_TOKENS)
     assert NUM_TOPK_TOKENS % BLOCK_N == 0, (
         f"NUM_TOPK_TOKENS ({NUM_TOPK_TOKENS}) must be divisible byBLOCK_N ({BLOCK_N})"
     )
